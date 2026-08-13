@@ -200,7 +200,7 @@ export function aggregateAuditReport(
       id,
       name: r.branch?.name ?? "Unknown",
       code: r.branch?.code ?? null,
-      pcts: [],
+      pcts: [] as number[],
       jobStats: new Map(),
       auditorSet: new Set(),
     };

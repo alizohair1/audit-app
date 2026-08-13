@@ -78,9 +78,16 @@ export default function AuditReportDashboard({
 
   async function loadReport() {
     setLoading(true);
+
+    // NOTE the explicit <string, RawSubmissionRow> generic on .select() below.
+    // Without generated Supabase Database types, postgrest-js's select-string
+    // parser can't prove branch/job_type/auditor are one-to-one relations, so
+    // it defaults every embedded resource to an array — even with `!inner`.
+    // The generic overrides the inferred type directly, matching what the
+    // query actually returns at runtime (confirmed against real field shapes).
     let query = supabase
       .from("audit_submissions")
-      .select(
+      .select<string, RawSubmissionRow>(
         `date, percentage, obtained_score, std_score_used, time_taken_seconds, band, report_link, submitted_at,
          branch_id, job_type_id, auditor_id,
          branch:branches!inner(id, name, code),
@@ -96,7 +103,7 @@ export default function AuditReportDashboard({
     if (auditorId) query = query.eq("auditor_id", auditorId);
 
     const { data } = await query;
-    const aggregated = aggregateAuditReport((data as RawSubmissionRow[]) ?? [], jobTypes, from, to);
+    const aggregated = aggregateAuditReport(data ?? [], jobTypes, from, to);
     setReport(aggregated);
     setLoading(false);
   }
