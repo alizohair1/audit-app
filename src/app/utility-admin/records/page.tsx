@@ -5,17 +5,22 @@ import { createClient } from "@/lib/supabase/client";
 import Navbar from "@/components/Navbar";
 import SubNav from "@/components/SubNav";
 import { UTILITY_ADMIN_NAV } from "@/lib/nav";
+import { formatGensetMeter } from "@/lib/genset";
 import type { Branch } from "@/types/database.types";
 
 type Section = "electricity" | "diesel" | "genset";
 
+/** Local calendar date (YYYY-MM-DD), not UTC — so the default range is right early in the morning in Pakistan. */
+function localDate(d: Date) {
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return localDate(new Date());
 }
 function daysAgoStr(n: number) {
   const d = new Date();
   d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
+  return localDate(d);
 }
 
 interface Row {
@@ -90,12 +95,12 @@ export default function UtilityAdminRecordsPage() {
         date: r.date,
         branchName: r.branch?.name ?? "—",
         Amount: r.amount,
-        Litres: r.litres,
+        "Litres (L)": r.litres,
       }));
     } else {
       let q = supabase
         .from("genset_readings")
-        .select("id, date, dip_stick_measure, fuel_tank_fill_pct, external_tank, branch:branches(name)")
+        .select("id, date, dip_stick_measure, fuel_tank_fill_pct, external_tank, genset_meter_minutes, branch:branches(name)")
         .gte("date", from)
         .lte("date", to)
         .order("date", { ascending: false });
@@ -105,9 +110,10 @@ export default function UtilityAdminRecordsPage() {
         id: r.id,
         date: r.date,
         branchName: r.branch?.name ?? "—",
-        "Dip Stick": r.dip_stick_measure,
-        "Fuel %": r.fuel_tank_fill_pct,
-        "External Tank": r.external_tank,
+        "Dip Stick (m)": r.dip_stick_measure,
+        "Fuel (%)": r.fuel_tank_fill_pct,
+        "Digital Genset Meter": formatGensetMeter(r.genset_meter_minutes),
+        "External Tank (m)": r.external_tank,
       }));
     }
 
@@ -206,7 +212,7 @@ export default function UtilityAdminRecordsPage() {
                   <td className="py-2.5 px-4 whitespace-nowrap text-grey">{row.date}</td>
                   <td className="py-2.5 px-4 font-medium">{row.branchName}</td>
                   {columns.map((c) => (
-                    <td key={c} className="py-2.5 px-4">
+                    <td key={c} className="py-2.5 px-4 whitespace-nowrap">
                       {row[c] ?? "—"}
                     </td>
                   ))}
