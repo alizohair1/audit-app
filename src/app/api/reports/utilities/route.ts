@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { createClient } from "@/lib/supabase/server";
 import { getMyProfile } from "@/lib/supabase/guards";
+import { localDateStr } from "@/lib/dates";
+import { formatGensetMeter } from "@/lib/genset";
 
 export async function GET(req: NextRequest) {
   const profile = await getMyProfile();
@@ -26,7 +28,7 @@ export async function GET(req: NextRequest) {
     .order("date", { ascending: false });
   let gensetQuery = supabase
     .from("genset_readings")
-    .select("date, dip_stick_measure, fuel_tank_fill_pct, external_tank, branch:branches(name)")
+    .select("date, dip_stick_measure, fuel_tank_fill_pct, external_tank, genset_meter_minutes, branch:branches(name)")
     .order("date", { ascending: false });
 
   if (branchId) {
@@ -66,7 +68,7 @@ export async function GET(req: NextRequest) {
     { header: "Date", key: "date", width: 12 },
     { header: "Branch", key: "branch", width: 18 },
     { header: "Amount", key: "amount", width: 14 },
-    { header: "Litres", key: "litres", width: 14 },
+    { header: "Litres (L)", key: "litres", width: 14 },
   ];
   dieselSheet.getRow(1).font = { bold: true };
   (diesel as any[])?.forEach((r) => dieselSheet.addRow({ date: r.date, branch: r.branch?.name, amount: r.amount, litres: r.litres }));
@@ -75,9 +77,10 @@ export async function GET(req: NextRequest) {
   gensetSheet.columns = [
     { header: "Date", key: "date", width: 12 },
     { header: "Branch", key: "branch", width: 18 },
-    { header: "Dip Stick Measure", key: "dip", width: 18 },
-    { header: "Fuel Tank Fill %", key: "fuel", width: 16 },
-    { header: "External Tank", key: "ext", width: 14 },
+    { header: "Dip Stick Measure (m)", key: "dip", width: 22 },
+    { header: "Fuel Tank Fill (%)", key: "fuel", width: 18 },
+    { header: "Digital Genset Meter", key: "meter", width: 22 },
+    { header: "External Tank (m)", key: "ext", width: 18 },
   ];
   gensetSheet.getRow(1).font = { bold: true };
   (genset as any[])?.forEach((r) =>
@@ -86,6 +89,7 @@ export async function GET(req: NextRequest) {
       branch: r.branch?.name,
       dip: r.dip_stick_measure,
       fuel: r.fuel_tank_fill_pct,
+      meter: formatGensetMeter(r.genset_meter_minutes),
       ext: r.external_tank,
     })
   );
@@ -95,7 +99,7 @@ export async function GET(req: NextRequest) {
   return new NextResponse(buffer, {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": `attachment; filename="utilities-report-${new Date().toISOString().slice(0, 10)}.xlsx"`,
+      "Content-Disposition": `attachment; filename="utilities-report-${localDateStr()}.xlsx"`,
     },
   });
 }
