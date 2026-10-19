@@ -3,6 +3,7 @@ import ExcelJS from "exceljs";
 import { createClient } from "@/lib/supabase/server";
 import { getMyProfile } from "@/lib/supabase/guards";
 import { localDateStr } from "@/lib/dates";
+import { formatGensetMeter } from "@/lib/genset";
 
 export async function GET(req: NextRequest) {
   const profile = await getMyProfile();
@@ -26,7 +27,7 @@ export async function GET(req: NextRequest) {
     .order("date", { ascending: false });
   let gensetQuery = supabase
     .from("genset_readings")
-    .select("date, dip_stick_measure, fuel_tank_fill_pct, external_tank")
+    .select("date, dip_stick_measure, fuel_tank_fill_pct, external_tank, genset_meter_minutes")
     .order("date", { ascending: false });
 
   if (from) {
@@ -61,7 +62,7 @@ export async function GET(req: NextRequest) {
   dieselSheet.columns = [
     { header: "Date", key: "date", width: 12 },
     { header: "Amount", key: "amount", width: 14 },
-    { header: "Litres", key: "litres", width: 14 },
+    { header: "Litres (L)", key: "litres", width: 14 },
   ];
   dieselSheet.getRow(1).font = { bold: true };
   (diesel as any[])?.forEach((r) => dieselSheet.addRow({ date: r.date, amount: r.amount, litres: r.litres }));
@@ -69,9 +70,10 @@ export async function GET(req: NextRequest) {
   const gensetSheet = workbook.addWorksheet("Genset");
   gensetSheet.columns = [
     { header: "Date", key: "date", width: 12 },
-    { header: "Dip Stick Measure", key: "dip", width: 18 },
-    { header: "Fuel Tank Fill %", key: "fuel", width: 16 },
-    { header: "External Tank", key: "ext", width: 14 },
+    { header: "Dip Stick Measure (m)", key: "dip", width: 22 },
+    { header: "Fuel Tank Fill (%)", key: "fuel", width: 18 },
+    { header: "Digital Genset Meter", key: "meter", width: 22 },
+    { header: "External Tank (m)", key: "ext", width: 18 },
   ];
   gensetSheet.getRow(1).font = { bold: true };
   (genset as any[])?.forEach((r) =>
@@ -79,6 +81,7 @@ export async function GET(req: NextRequest) {
       date: r.date,
       dip: r.dip_stick_measure,
       fuel: r.fuel_tank_fill_pct,
+      meter: formatGensetMeter(r.genset_meter_minutes),
       ext: r.external_tank,
     })
   );
