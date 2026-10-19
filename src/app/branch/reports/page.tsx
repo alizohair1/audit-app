@@ -9,6 +9,7 @@ import ElectricityUsageCard from "@/components/ElectricityUsageCard";
 import BranchTrendCharts from "@/components/BranchTrendCharts";
 import { computeMeterConsumption, sumConsumptionByDate } from "@/lib/consumption";
 import { todayStr, daysAgoStr, dateRange } from "@/lib/dates";
+import { formatGensetMeter } from "@/lib/genset";
 
 interface HistoryRow {
   date: string;
@@ -16,9 +17,11 @@ interface HistoryRow {
   reading?: number;
   dieselAmount?: number;
   dieselLitres?: number;
-  dipStick?: number;
-  fuelPct?: number;
-  externalTank?: number;
+  isGenset?: boolean;
+  dipStick?: number | null;
+  fuelPct?: number | null;
+  externalTank?: number | null;
+  gensetMeterMinutes?: number | null;
 }
 
 export default function BranchReportsPage() {
@@ -81,7 +84,7 @@ export default function BranchReportsPage() {
         .limit(20),
       supabase
         .from("genset_readings")
-        .select("date, dip_stick_measure, fuel_tank_fill_pct, external_tank")
+        .select("date, dip_stick_measure, fuel_tank_fill_pct, external_tank, genset_meter_minutes")
         .eq("branch_id", branch)
         .order("date", { ascending: false })
         .limit(20),
@@ -119,8 +122,11 @@ export default function BranchReportsPage() {
     (dieselInRange ?? []).forEach((r: any) => dieselMap.set(r.date, (dieselMap.get(r.date) ?? 0) + (r.litres ?? 0)));
     setDieselTrend(days.map((d) => ({ date: d.slice(5), litres: dieselMap.get(d) ?? 0 })));
 
+    // Only rows that actually have a fuel % feed the trend (external-tank-only rows have none).
     const gensetMap = new Map<string, number>();
-    (gensetInRange ?? []).forEach((r: any) => gensetMap.set(r.date, r.fuel_tank_fill_pct ?? 0));
+    (gensetInRange ?? []).forEach((r: any) => {
+      if (r.fuel_tank_fill_pct != null) gensetMap.set(r.date, r.fuel_tank_fill_pct);
+    });
     setFuelTrend(days.map((d) => ({ date: d.slice(5), pct: gensetMap.get(d) ?? 0 })));
 
     // --- Recent submissions list (independent of date range, last 20 of each) ---
@@ -128,7 +134,14 @@ export default function BranchReportsPage() {
     (elecHistoryRaw as any[] | null)?.forEach((r) => rows.push({ date: r.date, meter: r.meter?.meter_number, reading: r.reading }));
     (dieselHistoryRaw as any[] | null)?.forEach((r) => rows.push({ date: r.date, dieselAmount: r.amount, dieselLitres: r.litres }));
     (gensetHistoryRaw as any[] | null)?.forEach((r) =>
-      rows.push({ date: r.date, dipStick: r.dip_stick_measure, fuelPct: r.fuel_tank_fill_pct, externalTank: r.external_tank })
+      rows.push({
+        date: r.date,
+        isGenset: true,
+        dipStick: r.dip_stick_measure,
+        fuelPct: r.fuel_tank_fill_pct,
+        externalTank: r.external_tank,
+        gensetMeterMinutes: r.genset_meter_minutes,
+      })
     );
     rows.sort((a, b) => (a.date < b.date ? 1 : -1));
     setHistory(rows);
@@ -141,6 +154,17 @@ export default function BranchReportsPage() {
     if (from) params.set("from", from);
     if (to) params.set("to", to);
     return `/api/reports/branch?${params.toString()}`;
+  }
+
+  /** "dip 0.45 m · fuel 62.5% · meter 123 h 45 min · external tank 1.2 m" — only the parts that were entered. */
+  function gensetSummary(row: HistoryRow) {
+    const parts: string[] = [];
+    if (row.dipStick != null) parts.push(`dip ${row.dipStick} m`);
+    if (row.fuelPct != null) parts.push(`fuel ${row.fuelPct}%`);
+    const meter = formatGensetMeter(row.gensetMeterMinutes);
+    if (meter) parts.push(`meter ${meter}`);
+    if (row.externalTank != null) parts.push(`external tank ${row.externalTank} m`);
+    return parts.join(" · ");
   }
 
   return (
@@ -196,11 +220,7 @@ export default function BranchReportsPage() {
                     Diesel: {row.dieselAmount} / {row.dieselLitres} L
                   </span>
                 )}
-                {row.dipStick != null && (
-                  <span>
-                    Genset: dip {row.dipStick}, fuel {row.fuelPct}%, ext {row.externalTank}
-                  </span>
-                )}
+                {row.isGenset && <span>Genset: {gensetSummary(row) || "—"}</span>}
               </div>
             ))}
           </div>
